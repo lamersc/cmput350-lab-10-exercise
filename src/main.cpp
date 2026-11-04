@@ -38,7 +38,17 @@ int main() {
     fullscreenTriangle[2].texCoords = {0, 2};
     // load vertex and fragment shaders:
     sf::Shader shader(std::filesystem::path{"main.vert"}, std::filesystem::path{"main.frag"});
-    // ... other shaders can go here...
+    sf::Shader copyShader(std::filesystem::path{"main.vert"}, std::filesystem::path{"copy.frag"});
+    sf::RenderTexture bufA(window.getSize());
+    sf::RenderTexture bufB(window.getSize());
+    bufA.setSmooth(true);
+    bufB.setSmooth(true);
+    bufA.clear(sf::Color::Black);
+    bufA.display();
+    bufB.clear(sf::Color::Black);
+    bufB.display();
+    sf::RenderTexture* front = &bufA;
+    sf::RenderTexture* back = &bufB;
 
     sf::Font openSansFont(EmbeddedFonts::OpenSans_SemiBold_ttf,
                           EmbeddedFonts::OpenSans_SemiBold_ttf_len);
@@ -56,11 +66,14 @@ int main() {
     float worldUnitsPerPixel = 1.f / window.getSize().y;
     sf::Vector2f camCenterWorld{0.f, 0.f};
     int maxIters = INIT_ITERS;
+    sf::Vector2f oldCamCenterWorld{0.f, 0.f};
+    float oldWorldUnitsPerPixel = worldUnitsPerPixel;
 
     int i = -1;
     while (window.isOpen()) {
         ++i;
         bool moved = false;
+        bool cMoved = false;
 
         while (auto e = window.pollEvent()) {
             if (e->is<sf::Event::Closed>()) {
@@ -79,18 +92,22 @@ int main() {
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Scan::W)) {
             c.y += 0.001;
             moved = true;
+            cMoved = true;
         }
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Scan::S)) {
             c.y -= 0.001;
             moved = true;
+            cMoved = true;
         }
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Scan::A)) {
             c.x -= 0.001;
             moved = true;
+            cMoved = true;
         }
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Scan::D)) {
             c.x += 0.001;
             moved = true;
+            cMoved = true;
         }
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Scan::Up)) {
             camCenterWorld.y += 2 * worldUnitsPerPixel;
@@ -113,18 +130,33 @@ int main() {
         } else {
             maxIters = std::min(maxIters * 2, TRUE_MAX_ITERS);
         }
-        // TODO set shader uniforms here...
+        shader.setUniform("c", c);
+        shader.setUniform("MAX_ITERS", maxIters);
+        shader.setUniform("windowSizePixels", sf::Vector2f(window.getSize()));
+        shader.setUniform("camCenterWorld", camCenterWorld);
+        shader.setUniform("camWorldUnitsPerPixel", worldUnitsPerPixel);
+        shader.setUniform("oldCamCenterWorld", oldCamCenterWorld);
+        shader.setUniform("oldCamWorldUnitsPerPixel", oldWorldUnitsPerPixel);
+        shader.setUniform("oldFrame", front->getTexture());
+        shader.setUniform("cChanged", cMoved || i == 0);
 
+        back->clear(sf::Color::Black);
+        back->draw(fullscreenTriangle, &shader);
+        back->display();
+        copyShader.setUniform("toCopy", back->getTexture());
         window.clear(sf::Color::Black);
-        // TODO something.draw(fullscreenTriangle, &shader);
-        // this might change as you finish more parts!
+        window.draw(fullscreenTriangle, &copyShader);
         cText.setString("c = (" + std::to_string(c.x) + ", " + std::to_string(c.y) + ")");
         cTextShadow.setString("c = (" + std::to_string(c.x) + ", " + std::to_string(c.y) + ")");
         window.draw(cTextShadow);
         window.draw(cText);
         window.display();
 
-        // TODO (reprojection)... update "old" states
+        oldCamCenterWorld = camCenterWorld;
+        oldWorldUnitsPerPixel = worldUnitsPerPixel;
+        sf::RenderTexture* tmp = front;
+        front = back;
+        back = tmp;
     }
     return 0;
 }
